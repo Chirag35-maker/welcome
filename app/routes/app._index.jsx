@@ -99,6 +99,44 @@ export const action = async ({ request }) => {
     return responseJson.data.metafieldsSet;
   }
 
+  if (action === "saveSelectedCountries") {
+    const selectedCountries = JSON.parse(formData.get("selectedCountries"));
+    
+    // Create or update metafield for selected countries
+    const response = await admin.graphql(
+      `#graphql
+        mutation createMetafield($metafields: [MetafieldsSetInput!]!) {
+          metafieldsSet(metafields: $metafields) {
+            metafields {
+              id
+              key
+              value
+              type
+            }
+            userErrors {
+              field
+              message
+            }
+          }
+        }
+      `,
+      {
+        variables: {
+          metafields: [{
+            namespace: "welcome",
+            key: "selected-countries",
+            value: JSON.stringify(selectedCountries),
+            type: "json",
+            ownerId: "gid://shopify/Shop/1",
+          }],
+        },
+      }
+    );
+    
+    const responseJson = await response.json();
+    return responseJson.data.metafieldsSet;
+  }
+
   const color = ["Red", "Orange", "Yellow", "Green"][
     Math.floor(Math.random() * 4)
   ];
@@ -186,27 +224,62 @@ export default function Index() {
     { label: 'India', value: 'IN' },
   ];
 
+  // Load existing metafields when component mounts
+  useEffect(() => {
+    const loadMetafields = async () => {
+      const response = await fetch('/app');
+      const metafields = await response.json();
+      
+      // Initialize popup settings and selected countries from metafields
+      const settings = {};
+      let savedCountries = ['US']; // Default to US if no saved countries
+      
+      metafields.edges.forEach(({ node }) => {
+        if (node.key === 'selected-welcome') {
+          try {
+            const parsedValue = JSON.parse(node.value);
+            settings[parsedValue.countryCode] = parsedValue;
+          } catch (e) {
+            console.error('Error parsing metafield value:', e);
+          }
+        }
+        if (node.key === 'selected-countries') {
+          try {
+            savedCountries = JSON.parse(node.value);
+          } catch (e) {
+            console.error('Error parsing selected countries:', e);
+          }
+        }
+      });
+      
+      setPopupSettings(settings);
+      setSelectedCountries(savedCountries);
+    };
+    
+    loadMetafields();
+  }, []);
+
+  // Save selected countries when they change
+  useEffect(() => {
+    const saveCountries = async () => {
+      const formData = new FormData();
+      formData.append("action", "saveSelectedCountries");
+      formData.append("selectedCountries", JSON.stringify(selectedCountries));
+      fetcher.submit(formData, { method: "POST" });
+    };
+    
+    saveCountries();
+  }, [selectedCountries]);
+
   const handleCountryChange = (value) => {
     setCurrentSelection(value);
     if (value && !selectedCountries.includes(value)) {
       setSelectedCountries([...selectedCountries, value]);
-      setPopupSettings(prev => ({
-        ...prev,
-        [value]: {
-          title: '',
-          description: '',
-          buttonText: '',
-          buttonLink: '',
-        }
-      }));
     }
   };
 
-  const removeCountry = (countryToRemove) => {
-    setSelectedCountries(selectedCountries.filter(country => country !== countryToRemove));
-    const newSettings = { ...popupSettings };
-    delete newSettings[countryToRemove];
-    setPopupSettings(newSettings);
+  const removeCountry = (countryCode) => {
+    setSelectedCountries(selectedCountries.filter(code => code !== countryCode));
   };
 
   const handlePopupSettingChange = (countryCode, field, value) => {
@@ -253,31 +326,6 @@ export default function Index() {
       shopify.toast.show("Product created");
     }
   }, [productId, shopify]);
-
-  // Load existing metafields when component mounts
-  useEffect(() => {
-    const loadMetafields = async () => {
-      const response = await fetch('/app');
-      const metafields = await response.json();
-      
-      // Initialize popup settings from metafields
-      const settings = {};
-      metafields.edges.forEach(({ node }) => {
-        if (node.key === 'selected-welcome') {
-          try {
-            const parsedValue = JSON.parse(node.value);
-            settings[parsedValue.countryCode] = parsedValue;
-          } catch (e) {
-            console.error('Error parsing metafield value:', e);
-          }
-        }
-      });
-      
-      setPopupSettings(settings);
-    };
-    
-    loadMetafields();
-  }, []);
 
   const generateProduct = () => fetcher.submit({}, { method: "POST" });
 
