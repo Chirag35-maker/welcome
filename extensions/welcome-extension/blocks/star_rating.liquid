@@ -1,0 +1,114 @@
+<style>/* Popup styling */
+.popup {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+}
+
+.popup-content {
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+    text-align: center;
+    width: 300px;
+}
+
+input {
+    width: 90%;
+    padding: 8px;
+    margin: 10px 0;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+}
+
+button {
+    margin: 5px;
+    padding: 8px 15px;
+    border: none;
+    cursor: pointer;
+    border-radius: 5px;
+}
+
+#submitBtn {
+    background: blue;
+    color: white;
+}
+
+#submitBtn:disabled {
+    background: gray;
+    cursor: not-allowed;
+}
+
+#closeBtn {
+    background: red;
+    color: white;
+}
+
+</style>
+<div id="emailPopup" class="popup">
+        <div class="popup-content">
+            <h2>Enter Your Email</h2>
+            <input type="email" id="emailInput" placeholder="Enter your email">
+            <p id="errorText"></p>
+            <button id="submitBtn" disabled>Submit</button>
+            <button id="closeBtn">Cancel</button>
+        </div>
+    </div>
+
+</div>
+
+
+<script>
+
+document.addEventListener("DOMContentLoaded", function () {
+    const popup = document.getElementById("emailPopup");
+    const emailInput = document.getElementById("emailInput");
+    const submitBtn = document.getElementById("submitBtn");
+    const closeBtn = document.getElementById("closeBtn");
+    const errorText = document.getElementById("errorText");
+
+    // Show popup when page loads
+    popup.style.display = "flex";
+
+    emailInput.addEventListener("input", function () {
+        const email = emailInput.value.trim();
+        console.log('email folder has been created',email)
+        if (/^[\w.-]+@[\w.-]+\.[A-Za-z]{2,}$/.test(email)) {
+            errorText.textContent = "";
+            submitBtn.disabled = false;
+        } else {
+            errorText.textContent = "Enter a valid email";
+            submitBtn.disabled = true;
+        }
+    });
+
+    submitBtn.addEventListener("click", function () {
+        alert("Email Submitted: " + emailInput.value);
+        popup.style.display = "none";
+    });
+
+    closeBtn.addEventListener("click", function () {
+        popup.style.display = "none";
+    });
+});
+
+
+</script>
+
+{% schema %}
+{
+  "name": "Star Rating",
+  "target": "body",
+  "settings": [
+    { "type": "product", "id": "product", "label": "product", "autofill": true },
+    { "type": "color", "id": "colour", "label": "Star Colour", "default": "#ff0000" }
+  ]
+}
+{% endschema %}
+

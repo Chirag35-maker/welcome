@@ -3,12 +3,13 @@
 client_id = "ead7b1feded484bf1ef2c63615038411"
 name = "Welcome"
 handle = "welcome-8"
-application_url = "https://coordinates-suggestions-leasing-apnic.trycloudflare.com"
+application_url = "https://customs-distributions-offset-exchange.trycloudflare.com"
 embedded = true
 
 [build]
 include_config_on_deploy = true
 automatically_update_urls_on_dev = true
+dev_store_url = "newstorewdce.myshopify.com"
 
 [webhooks]
 api_version = "2025-01"
@@ -27,9 +28,9 @@ scopes = "write_products"
 
 [auth]
 redirect_urls = [
-  "https://coordinates-suggestions-leasing-apnic.trycloudflare.com/auth/callback",
-  "https://coordinates-suggestions-leasing-apnic.trycloudflare.com/auth/shopify/callback",
-  "https://coordinates-suggestions-leasing-apnic.trycloudflare.com/api/auth/callback"
+  "https://customs-distributions-offset-exchange.trycloudflare.com/auth/callback",
+  "https://customs-distributions-offset-exchange.trycloudflare.com/auth/shopify/callback",
+  "https://customs-distributions-offset-exchange.trycloudflare.com/api/auth/callback"
 ]
 
 [pos]
