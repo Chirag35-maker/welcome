@@ -5,6 +5,7 @@ import {
   Scripts,
   ScrollRestoration,
 } from "@remix-run/react";
+import { EmailCollector } from "~/components/EmailCollector";
 
 export default function App() {
   return (
@@ -24,6 +25,7 @@ export default function App() {
         <Outlet />
         <ScrollRestoration />
         <Scripts />
+        <EmailCollector />
       </body>
     </html>
   );
