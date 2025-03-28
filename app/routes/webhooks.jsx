@@ -1,27 +1,29 @@
 import { authenticate } from "../shopify.server";
-import { verifyShopifyWebhook } from "../utils/webhook-verification";
+import crypto from 'crypto';
 
 export const action = async ({ request }) => {
-  // Get the raw body first, before any parsing
-  const rawBody = await request.text();
-  
-  // Clone the request for authentication
-  const clonedRequest = new Request(request.url, {
-    method: request.method,
-    headers: request.headers,
-    body: rawBody
-  });
+  // Clone the request before authentication consumes the body
+  const reqClone = request.clone();
+  const rawPayload = await reqClone.text();
 
-  const { topic, shop, session } = await authenticate.webhook(clonedRequest);
-  const hmac = request.headers.get('X-Shopify-Hmac-SHA256');
+  // Get the HMAC signature from headers
+  const signature = request.headers.get("x-shopify-hmac-sha256");
 
-  // Verify the webhook signature using raw body
-  if (!verifyShopifyWebhook(topic, hmac, rawBody)) {
+  // Verify the webhook signature
+  const generatedSignature = crypto
+    .createHmac("SHA256", process.env.SHOPIFY_API_SECRET)
+    .update(rawPayload)
+    .digest("base64");
+
+  if (signature !== generatedSignature) {
     return new Response('Invalid webhook signature', { status: 401 });
   }
 
+  // Now authenticate the webhook
+  const { topic, shop, session } = await authenticate.webhook(request);
+
   // Parse the body only after verification
-  const body = JSON.parse(rawBody);
+  const body = JSON.parse(rawPayload);
 
   // Handle compliance webhooks
   if (topic === 'customers/data_request') {
