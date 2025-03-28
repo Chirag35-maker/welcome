@@ -3,7 +3,7 @@
 client_id = "ead7b1feded484bf1ef2c63615038411"
 name = "Welcome"
 handle = "welcome-8"
-application_url = "https://customs-distributions-offset-exchange.trycloudflare.com"
+application_url = "https://attach-experiment-nvidia-los.trycloudflare.com"
 embedded = true
 
 [build]
@@ -12,7 +12,7 @@ automatically_update_urls_on_dev = true
 dev_store_url = "newstorewdce.myshopify.com"
 
 [webhooks]
-api_version = "2024-07"
+api_version = "2025-01"
 
   [[webhooks.subscriptions]]
   topics = [ "app/uninstalled" ]
@@ -23,19 +23,24 @@ api_version = "2024-07"
   uri = "/webhooks/app/scopes_update"
 
   [[webhooks.subscriptions]]
-  compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
+  compliance_topics = [ "customers/data_request", "customers/redact", "shop/redact" ]
   uri = "/webhooks"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "write_products"
+scopes = "write_products,write_discounts,write_customers"
 
 [auth]
 redirect_urls = [
-  "https://customs-distributions-offset-exchange.trycloudflare.com/auth/callback",
-  "https://customs-distributions-offset-exchange.trycloudflare.com/auth/shopify/callback",
-  "https://customs-distributions-offset-exchange.trycloudflare.com/api/auth/callback"
+  "https://attach-experiment-nvidia-los.trycloudflare.com/auth/callback",
+  "https://attach-experiment-nvidia-los.trycloudflare.com/auth/shopify/callback",
+  "https://attach-experiment-nvidia-los.trycloudflare.com/api/auth/callback"
 ]
 
 [pos]
 embedded = false
+
+[app_proxy]
+subpath = "welcome"
+prefix = "apps"
+url = "https://attach-experiment-nvidia-los.trycloudflare.com"

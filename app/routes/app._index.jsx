@@ -64,12 +64,17 @@ export const action = async ({ request }) => {
       const discountData = JSON.parse(formData.get("discountData"));
       const response = await admin.graphql(
         `#graphql
-          mutation discountCodeAppCreate($codeAppDiscount: DiscountCodeAppInput!) {
-            discountCodeAppCreate(codeAppDiscount: $codeAppDiscount) {
-              codeAppDiscount {
-                id
-                codes {
-                  code
+          mutation discountCodeBasicCreate($basicCodeDiscount: DiscountCodeBasicInput!) {
+            discountCodeBasicCreate(basicCodeDiscount: $basicCodeDiscount) {
+              codeDiscountNode {
+                codeDiscount {
+                  ... on DiscountCodeBasic {
+                    codes(first: 1) {
+                      nodes {
+                        code
+                      }
+                    }
+                  }
                 }
               }
               userErrors {
@@ -81,30 +86,45 @@ export const action = async ({ request }) => {
         `,
         {
           variables: {
-            codeAppDiscount: {
+            basicCodeDiscount: {
               title: discountData.title,
               code: discountData.code,
-              amount: {
-                amount: parseFloat(discountData.amount),
-                type: discountData.type.toUpperCase()
-              },
               startsAt: discountData.startsAt,
               endsAt: discountData.endsAt || null,
               usageLimit: discountData.usageLimit ? parseInt(discountData.usageLimit) : null,
               appliesOncePerCustomer: discountData.appliesOncePerCustomer,
+              customerSelection: {
+                all: true
+              },
+              customerGets: {
+                value: discountData.type === "percentage"
+                  ? { percentage: parseFloat(discountData.amount) / 100 } // Convert percentage to decimal (e.g., 20% -> 0.2)
+                  : { amount: { amount: parseFloat(discountData.amount), currencyCode: "USD" } },
+                items: {
+                  all: true
+                }
+              },
+              combinesWith: {
+                orderDiscounts: false,
+                productDiscounts: false,
+                shippingDiscounts: false
+              }
             }
           }
         }
       );
 
       const responseJson = await response.json();
-      if (responseJson.data.discountCodeAppCreate.userErrors.length > 0) {
-        throw new Error(responseJson.data.discountCodeAppCreate.userErrors[0].message);
+      if (responseJson.data.discountCodeBasicCreate.userErrors &&
+          responseJson.data.discountCodeBasicCreate.userErrors.length > 0) {
+        throw new Error(responseJson.data.discountCodeBasicCreate.userErrors[0].message);
       }
 
-      return json({ 
-        success: true, 
-        discountCode: responseJson.data.discountCodeAppCreate.codeAppDiscount.codes[0].code 
+      const discountCode = responseJson.data.discountCodeBasicCreate.codeDiscountNode.codeDiscount.codes.nodes[0].code;
+
+      return json({
+        success: true,
+        discountCode: discountCode
       });
     } catch (error) {
       console.error("Error creating discount:", error);
@@ -170,6 +190,7 @@ export default function Index() {
   const { countrySettings } = useLoaderData();
   const [selectedCountries, setSelectedCountries] = useState(Object.keys(countrySettings));
   const [error, setError] = useState(null);
+  const [successMessage, setSuccessMessage] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [editingCountry, setEditingCountry] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -183,15 +204,64 @@ export default function Index() {
     title: "",
     code: "",
     amount: "",
-    type: "percentage",
+    type: "percentage", // percentage or fixed_amount
     startsAt: new Date().toISOString().split('T')[0],
     endsAt: "",
     usageLimit: "",
     appliesOncePerCustomer: false,
   });
+  const [currentCountryForDiscount, setCurrentCountryForDiscount] = useState(null);
   const submit = useSubmit();
   const fetcher = useFetcher();
   const app = useAppBridge();
+
+  // Handle fetcher state for discount creation
+  useEffect(() => {
+    // Set loading state based on fetcher state
+    setIsLoading(fetcher.state === "submitting");
+
+    if (fetcher.state === "idle" && fetcher.data?.success && fetcher.data?.discountCode) {
+      // If we have a successful discount creation
+      const newDiscountCode = fetcher.data.discountCode;
+
+      // Set success message
+      setSuccessMessage(`Discount code "${newDiscountCode}" created successfully!`);
+
+      // Clear success message after 5 seconds
+      setTimeout(() => {
+        setSuccessMessage(null);
+      }, 5000);
+
+      // Update the form data with the new discount code
+      if (currentCountryForDiscount) {
+        const countryLabel = countries.find(c => c.value === currentCountryForDiscount)?.label || currentCountryForDiscount;
+
+        const newSettings = {
+          ...countrySettings,
+          [currentCountryForDiscount]: {
+            ...countrySettings[currentCountryForDiscount],
+            discountCode: newDiscountCode
+          }
+        };
+
+        const settingsFormData = new FormData();
+        settingsFormData.append("countrySettings", JSON.stringify(newSettings));
+        submit(settingsFormData, { method: "post" });
+
+        // Close the modal and reset state
+        setIsDiscountModalOpen(false);
+        setCurrentCountryForDiscount(null);
+      }
+    } else if (fetcher.state === "idle" && fetcher.data?.error) {
+      // Handle error
+      setError("Failed to create discount: " + fetcher.data.error);
+
+      // Clear error message after 5 seconds
+      setTimeout(() => {
+        setError(null);
+      }, 5000);
+    }
+  }, [fetcher.state, fetcher.data]);
 
   const countries = [
     { label: "Antigua and Barbuda", value: "AG" },
@@ -281,43 +351,46 @@ export default function Index() {
     setEditingCountry(null);
   };
 
-  const handleCreateDiscount = async () => {
+  const generateRandomCode = () => {
+    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    const codeLength = 10;
+    let result = '';
+    for (let i = 0; i < codeLength; i++) {
+      result += characters.charAt(Math.floor(Math.random() * characters.length));
+    }
+    return result;
+  };
+
+  const handleCreateDiscount = () => {
     try {
-      setIsLoading(true);
+      // Generate a random code if needed
+      const randomCode = generateRandomCode();
+
+      // If code is empty, use the random one
+      if (!discountFormData.code.trim()) {
+        setDiscountFormData(prev => ({
+          ...prev,
+          code: randomCode
+        }));
+      }
+
+      const dataToSubmit = {
+        ...discountFormData,
+        // Ensure code is set even if the state update hasn't completed yet
+        code: discountFormData.code.trim() || randomCode
+      };
+
       const formDataToSubmit = new FormData();
       formDataToSubmit.append("actionType", "createDiscount");
-      formDataToSubmit.append("discountData", JSON.stringify(discountFormData));
-      
+      formDataToSubmit.append("discountData", JSON.stringify(dataToSubmit));
+
+      // Use fetcher to submit the form
       fetcher.submit(formDataToSubmit, { method: "post" });
-      
-      if (fetcher.data?.error) {
-        throw new Error(fetcher.data.error);
-      }
 
-      if (fetcher.data?.success) {
-        // Update the discount code in the form data
-        setFormData(prev => ({
-          ...prev,
-          discountCode: fetcher.data.discountCode
-        }));
-
-        setIsDiscountModalOpen(false);
-        setDiscountFormData({
-          title: "",
-          code: "",
-          amount: "",
-          type: "percentage",
-          startsAt: new Date().toISOString().split('T')[0],
-          endsAt: "",
-          usageLimit: "",
-          appliesOncePerCustomer: false,
-        });
-      }
+      // The rest of the logic is handled in the useEffect hook that watches fetcher state
     } catch (error) {
       setError("Failed to create discount: " + error.message);
       console.error("Error creating discount:", error);
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -349,6 +422,12 @@ export default function Index() {
               {error && (
                 <Banner status="critical">
                   <p>{error}</p>
+                </Banner>
+              )}
+
+              {successMessage && (
+                <Banner status="success">
+                  <p>{successMessage}</p>
                 </Banner>
               )}
 
@@ -397,7 +476,19 @@ export default function Index() {
                               <Text as="p" variant="bodyMd" style={{ whiteSpace: 'pre-wrap' }}>
                                 {countrySettings[country].discountCode || "No discount code set"}
                               </Text>
-                              <Button onClick={() => setIsDiscountModalOpen(true)}>Create Discount</Button>
+                              <Button
+                                onClick={() => {
+                                  setCurrentCountryForDiscount(country);
+                                  setDiscountFormData({
+                                    ...discountFormData,
+                                    title: `Discount for ${countries.find(c => c.value === country)?.label || country}`,
+                                    code: ""  // Will be randomly generated if left empty
+                                  });
+                                  setIsDiscountModalOpen(true);
+                                }}
+                              >
+                                {countrySettings[country].discountCode ? "Update Discount" : "Create Discount"}
+                              </Button>
                             </InlineStack>
                           </BlockStack>
                         </>
@@ -457,7 +548,10 @@ export default function Index() {
       <Modal
         open={isDiscountModalOpen}
         onClose={() => setIsDiscountModalOpen(false)}
-        title="Create Discount"
+        title={currentCountryForDiscount ?
+          `Create Discount for ${countries.find(c => c.value === currentCountryForDiscount)?.label || currentCountryForDiscount}` :
+          "Create Discount"
+        }
         primaryAction={{
           content: "Create",
           onAction: handleCreateDiscount,
@@ -466,24 +560,45 @@ export default function Index() {
         secondaryActions={[
           {
             content: "Cancel",
-            onAction: () => setIsDiscountModalOpen(false),
+            onAction: () => {
+              setIsDiscountModalOpen(false);
+              setCurrentCountryForDiscount(null);
+            },
           },
         ]}
       >
         <Modal.Section>
           <BlockStack gap="4">
+            <Banner status="info">
+              <p>Create a discount that will be applied to the selected country. You can either enter a custom discount code or leave it empty to generate a random one.</p>
+              <p>This will create a product discount that applies to all products in your store.</p>
+            </Banner>
             <TextField
               label="Title"
               value={discountFormData.title}
               onChange={(value) => setDiscountFormData({ ...discountFormData, title: value })}
               placeholder="Enter discount title..."
             />
-            <TextField
-              label="Code"
-              value={discountFormData.code}
-              onChange={(value) => setDiscountFormData({ ...discountFormData, code: value })}
-              placeholder="Enter discount code..."
-            />
+            <InlineStack gap="2" align="start">
+              <div style={{ flex: 1 }}>
+                <TextField
+                  label="Code"
+                  value={discountFormData.code}
+                  onChange={(value) => setDiscountFormData({ ...discountFormData, code: value })}
+                  placeholder="Enter discount code or leave empty for random..."
+                />
+              </div>
+              <div style={{ marginTop: '24px' }}>
+                <Button
+                  onClick={() => {
+                    const randomCode = generateRandomCode();
+                    setDiscountFormData({ ...discountFormData, code: randomCode });
+                  }}
+                >
+                  Generate Random
+                </Button>
+              </div>
+            </InlineStack>
             <Select
               label="Type"
               options={[

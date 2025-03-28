@@ -1,3 +1,9 @@
 name = "Welcome-Extension"
 type = "theme"
+extension_points = ["theme::app::blocks"]
+capabilities = {
+  network_access = true,
+  api_access = true,
+  block_progress = true
+}
 
