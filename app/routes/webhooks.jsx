@@ -7,20 +7,22 @@ export const action = async ({ request }) => {
   const rawPayload = await reqClone.text();
 
   // Get the HMAC signature from headers
-  const signature = request.headers.get("x-shopify-hmac-sha256");
+  const hmac = request.headers.get("x-shopify-hmac-sha256");
+  const topic = request.headers.get("x-shopify-topic");
+  const shop = request.headers.get("x-shopify-shop-domain");
 
   // Verify the webhook signature
-  const generatedSignature = crypto
-    .createHmac("SHA256", process.env.SHOPIFY_API_SECRET)
+  const hash = crypto
+    .createHmac("sha256", process.env.SHOPIFY_API_SECRET)
     .update(rawPayload)
     .digest("base64");
 
-  if (signature !== generatedSignature) {
+  if (hash !== hmac) {
     return new Response('Invalid webhook signature', { status: 401 });
   }
 
   // Now authenticate the webhook
-  const { topic, shop, session } = await authenticate.webhook(request);
+  const { session } = await authenticate.webhook(request);
 
   // Parse the body only after verification
   const body = JSON.parse(rawPayload);
