@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { json } from "@remix-run/node";
-import { useLoaderData, useSubmit } from "@remix-run/react";
+import { useLoaderData, useSubmit, useFetcher } from "@remix-run/react";
 import {
   Page,
   Layout,
@@ -16,6 +16,7 @@ import {
   LegacyCard,
   TextField,
   Modal,
+  Checkbox,
 } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
@@ -56,6 +57,60 @@ export const action = async ({ request }) => {
   const { admin } = await authenticate.admin(request);
   const formData = await request.formData();
   const countrySettings = formData.get("countrySettings");
+  const actionType = formData.get("actionType");
+
+  if (actionType === "createDiscount") {
+    try {
+      const discountData = JSON.parse(formData.get("discountData"));
+      const response = await admin.graphql(
+        `#graphql
+          mutation discountCodeAppCreate($codeAppDiscount: DiscountCodeAppInput!) {
+            discountCodeAppCreate(codeAppDiscount: $codeAppDiscount) {
+              codeAppDiscount {
+                id
+                codes {
+                  code
+                }
+              }
+              userErrors {
+                field
+                message
+              }
+            }
+          }
+        `,
+        {
+          variables: {
+            codeAppDiscount: {
+              title: discountData.title,
+              code: discountData.code,
+              amount: {
+                amount: parseFloat(discountData.amount),
+                type: discountData.type.toUpperCase()
+              },
+              startsAt: discountData.startsAt,
+              endsAt: discountData.endsAt || null,
+              usageLimit: discountData.usageLimit ? parseInt(discountData.usageLimit) : null,
+              appliesOncePerCustomer: discountData.appliesOncePerCustomer,
+            }
+          }
+        }
+      );
+
+      const responseJson = await response.json();
+      if (responseJson.data.discountCodeAppCreate.userErrors.length > 0) {
+        throw new Error(responseJson.data.discountCodeAppCreate.userErrors[0].message);
+      }
+
+      return json({ 
+        success: true, 
+        discountCode: responseJson.data.discountCodeAppCreate.codeAppDiscount.codes[0].code 
+      });
+    } catch (error) {
+      console.error("Error creating discount:", error);
+      return json({ error: error.message }, { status: 500 });
+    }
+  }
 
   try {
     const shopResponse = await admin.graphql(
@@ -118,12 +173,24 @@ export default function Index() {
   const [isLoading, setIsLoading] = useState(false);
   const [editingCountry, setEditingCountry] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isDiscountModalOpen, setIsDiscountModalOpen] = useState(false);
   const [formData, setFormData] = useState({
     heading: "",
     subheading: "",
     discountCode: "",
   });
+  const [discountFormData, setDiscountFormData] = useState({
+    title: "",
+    code: "",
+    amount: "",
+    type: "percentage",
+    startsAt: new Date().toISOString().split('T')[0],
+    endsAt: "",
+    usageLimit: "",
+    appliesOncePerCustomer: false,
+  });
   const submit = useSubmit();
+  const fetcher = useFetcher();
   const app = useAppBridge();
 
   const countries = [
@@ -214,6 +281,46 @@ export default function Index() {
     setEditingCountry(null);
   };
 
+  const handleCreateDiscount = async () => {
+    try {
+      setIsLoading(true);
+      const formDataToSubmit = new FormData();
+      formDataToSubmit.append("actionType", "createDiscount");
+      formDataToSubmit.append("discountData", JSON.stringify(discountFormData));
+      
+      fetcher.submit(formDataToSubmit, { method: "post" });
+      
+      if (fetcher.data?.error) {
+        throw new Error(fetcher.data.error);
+      }
+
+      if (fetcher.data?.success) {
+        // Update the discount code in the form data
+        setFormData(prev => ({
+          ...prev,
+          discountCode: fetcher.data.discountCode
+        }));
+
+        setIsDiscountModalOpen(false);
+        setDiscountFormData({
+          title: "",
+          code: "",
+          amount: "",
+          type: "percentage",
+          startsAt: new Date().toISOString().split('T')[0],
+          endsAt: "",
+          usageLimit: "",
+          appliesOncePerCustomer: false,
+        });
+      }
+    } catch (error) {
+      setError("Failed to create discount: " + error.message);
+      console.error("Error creating discount:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <Page>
       <TitleBar title="Country Selector" />
@@ -286,9 +393,12 @@ export default function Index() {
                           </BlockStack>
                           <BlockStack gap="2">
                             <Text as="p" variant="headingSm">Discount Code:</Text>
-                            <Text as="p" variant="bodyMd" style={{ whiteSpace: 'pre-wrap' }}>
-                              {countrySettings[country].discountCode || "No discount code set"}
-                            </Text>
+                            <InlineStack align="space-between">
+                              <Text as="p" variant="bodyMd" style={{ whiteSpace: 'pre-wrap' }}>
+                                {countrySettings[country].discountCode || "No discount code set"}
+                              </Text>
+                              <Button onClick={() => setIsDiscountModalOpen(true)}>Create Discount</Button>
+                            </InlineStack>
                           </BlockStack>
                         </>
                       )}
@@ -339,6 +449,81 @@ export default function Index() {
               onChange={(value) => setFormData({ ...formData, discountCode: value })}
               placeholder="Enter discount code for this country..."
               multiline={4}
+            />
+          </BlockStack>
+        </Modal.Section>
+      </Modal>
+
+      <Modal
+        open={isDiscountModalOpen}
+        onClose={() => setIsDiscountModalOpen(false)}
+        title="Create Discount"
+        primaryAction={{
+          content: "Create",
+          onAction: handleCreateDiscount,
+          loading: isLoading,
+        }}
+        secondaryActions={[
+          {
+            content: "Cancel",
+            onAction: () => setIsDiscountModalOpen(false),
+          },
+        ]}
+      >
+        <Modal.Section>
+          <BlockStack gap="4">
+            <TextField
+              label="Title"
+              value={discountFormData.title}
+              onChange={(value) => setDiscountFormData({ ...discountFormData, title: value })}
+              placeholder="Enter discount title..."
+            />
+            <TextField
+              label="Code"
+              value={discountFormData.code}
+              onChange={(value) => setDiscountFormData({ ...discountFormData, code: value })}
+              placeholder="Enter discount code..."
+            />
+            <Select
+              label="Type"
+              options={[
+                { label: "Percentage", value: "percentage" },
+                { label: "Fixed Amount", value: "fixed_amount" },
+              ]}
+              value={discountFormData.type}
+              onChange={(value) => setDiscountFormData({ ...discountFormData, type: value })}
+            />
+            <TextField
+              label="Amount"
+              type="number"
+              value={discountFormData.amount}
+              onChange={(value) => setDiscountFormData({ ...discountFormData, amount: value })}
+              placeholder={discountFormData.type === "percentage" ? "Enter percentage..." : "Enter amount..."}
+            />
+            <TextField
+              label="Start Date"
+              type="date"
+              value={discountFormData.startsAt}
+              onChange={(value) => setDiscountFormData({ ...discountFormData, startsAt: value })}
+            />
+            <TextField
+              label="End Date"
+              type="date"
+              value={discountFormData.endsAt}
+              onChange={(value) => setDiscountFormData({ ...discountFormData, endsAt: value })}
+              placeholder="Optional"
+            />
+            <TextField
+              label="Usage Limit"
+              type="number"
+              value={discountFormData.usageLimit}
+              onChange={(value) => setDiscountFormData({ ...discountFormData, usageLimit: value })}
+              placeholder="Optional"
+            />
+            <Checkbox
+              label="Apply once per customer"
+              checked={discountFormData.appliesOncePerCustomer}
+              onChange={(checked) => setDiscountFormData({ ...discountFormData, appliesOncePerCustomer: checked })}
             />
           </BlockStack>
         </Modal.Section>
