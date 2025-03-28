@@ -1,18 +1,18 @@
 import {
   Links,
+  LiveReload,
   Meta,
   Outlet,
   Scripts,
   ScrollRestoration,
 } from "@remix-run/react";
-import { EmailCollector } from "~/components/EmailCollector";
 
 export default function App() {
   return (
     <html>
       <head>
         <meta charSet="utf-8" />
-        <meta name="viewport" content="width=device-width,initial-scale=1" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="preconnect" href="https://cdn.shopify.com/" />
         <link
           rel="stylesheet"
@@ -25,7 +25,7 @@ export default function App() {
         <Outlet />
         <ScrollRestoration />
         <Scripts />
-        <EmailCollector />
+        <LiveReload />
       </body>
     </html>
   );
