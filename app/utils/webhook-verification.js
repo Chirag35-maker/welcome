@@ -1,6 +1,10 @@
 import crypto from 'crypto';
 
-export function verifyShopifyWebhook(topic, hmac, body, rawBody) {
+export function verifyShopifyWebhook(topic, hmac, rawBody) {
+  if (!hmac || !rawBody) {
+    return false;
+  }
+
   const hash = crypto
     .createHmac('sha256', process.env.SHOPIFY_API_SECRET)
     .update(rawBody, 'utf8')

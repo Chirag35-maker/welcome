@@ -2,16 +2,26 @@ import { authenticate } from "../shopify.server";
 import { verifyShopifyWebhook } from "../utils/webhook-verification";
 
 export const action = async ({ request }) => {
-  const { topic, shop, session } = await authenticate.webhook(request);
-
-  // Get the raw body for HMAC verification
+  // Get the raw body first, before any parsing
   const rawBody = await request.text();
+  
+  // Clone the request for authentication
+  const clonedRequest = new Request(request.url, {
+    method: request.method,
+    headers: request.headers,
+    body: rawBody
+  });
+
+  const { topic, shop, session } = await authenticate.webhook(clonedRequest);
   const hmac = request.headers.get('X-Shopify-Hmac-SHA256');
 
-  // Verify the webhook signature
-  if (!verifyShopifyWebhook(topic, hmac, JSON.parse(rawBody), rawBody)) {
+  // Verify the webhook signature using raw body
+  if (!verifyShopifyWebhook(topic, hmac, rawBody)) {
     return new Response('Invalid webhook signature', { status: 401 });
   }
+
+  // Parse the body only after verification
+  const body = JSON.parse(rawBody);
 
   // Handle compliance webhooks
   if (topic === 'customers/data_request') {
@@ -37,12 +47,11 @@ export const action = async ({ request }) => {
       }
       break;
     case "APP_SUBSCRIPTIONS_UPDATE":
-      const body = JSON.parse(rawBody);
       const subscription = body.app_subscription;
       // Handle subscription updates
       break;
     case "APP_PURCHASES_ONE_TIME_UPDATE":
-      const purchase = JSON.parse(rawBody);
+      const purchase = body;
       // Handle one-time purchase updates
       break;
     default:
