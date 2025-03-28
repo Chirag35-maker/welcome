@@ -1,5 +1,5 @@
 import { authenticate } from "../shopify.server";
-import { verifyShopifyWebhook } from "~/utils/webhook-verification";
+import { verifyShopifyWebhook } from "../utils/webhook-verification";
 
 export const action = async ({ request }) => {
   const { topic, shop, session } = await authenticate.webhook(request);
